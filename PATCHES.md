@@ -221,3 +221,30 @@ cross-compilation checks for Windows x86_64 GNU and macOS AArch64. Cross-compila
 execute native tests. The main-thread AppKit harness, Windows native message/IMM tests, live
 XIM/Wayland input methods, matching egui adapter and downstream custom editors remain separate
 qualification gates. Human review and merge are required.
+
+## Tablet-v2 pen input (W29)
+
+`zwp_tablet_manager_v2` is bound on the event loop's own connection and each seat gets a
+`zwp_tablet_seat_v2`. Tools are cached per connection (bounded), and a protocol `frame` becomes
+one coherent sample: position and scale, phase, pressure, tilt, rotation and the eraser end.
+Samples are queued per window (bounded at 2048) and exposed through
+`WindowExtWayland::take_tablet_input`; `tablet_input_available` says whether the compositor
+advertised the protocol when the window was created.
+
+The 0.30 `WindowEvent::Touch` carrier is kept: a press, drag and lift become
+`TouchPhase::{Started, Moved, Ended}` with `Force::Normalized` for contact samples. A lift sends
+no force, so the application keeps the contact pressure that painted the stroke. A device with
+no pressure capability reports full contact pressure. Hover stays `CursorMoved`, and a canceled
+contact (proximity loss or tool removal) sends `TouchPhase::Cancelled` before `CursorLeft`.
+Tablet touch ids carry `TABLET_TOUCH_TAG` so they never collide with `wl_touch` contact ids.
+
+Barrel buttons map to `MouseInput` (stylus tip 0x14b, barrel 0x14c, stylus3 0x149), and a pen
+down serial authorizes window move, resize and menu requests like a pointer button serial.
+Tablet cursors are set through `wp_tablet_tool.set_cursor`; a cursor allocation failure keeps
+the compositor cursor instead of terminating input.
+
+This is a narrow port of the tablet half of the suite's 2026-10-13 integration commit
+`2732964c88457e3e4b796ac6b15ef7fb332a6aad` onto the current IME branch. File drops and the
+shared clipboard from that commit are not part of W29. No pressure-capable tablet was attached
+to the development machine, so the protocol path is compiled and its mapping is unit-tested;
+a real-device check remains open. X11 and XWayland are unchanged.

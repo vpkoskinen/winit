@@ -79,6 +79,22 @@ pub struct Window {
 }
 
 impl Window {
+    /// Drain the tablet-v2 samples the event loop queued for this window.
+    pub fn take_tablet_input(&self) -> Vec<crate::platform::wayland::TabletInput> {
+        self.window_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take_tablet_input()
+    }
+
+    /// Whether tablet-v2 was advertised when this window was created.
+    pub fn tablet_input_available(&self) -> bool {
+        self.window_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .tablet_input_available
+    }
+
     pub(crate) fn new(
         event_loop_window_target: &ActiveEventLoop,
         attributes: WindowAttributes,

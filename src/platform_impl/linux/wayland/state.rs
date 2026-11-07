@@ -127,6 +127,15 @@ pub struct WinitState {
     /// KWin blur manager.
     pub kwin_blur_manager: Option<KWinBlurManager>,
 
+    /// The tablet-v2 manager, when the compositor advertises it.
+    pub tablet_manager: Option<super::seat::tablet::TabletManager>,
+
+    /// Live tablet tool objects, keyed by their connection-local id.
+    pub tablet_tools: AHashMap<
+        ObjectId,
+        sctk::reexports::protocols::wp::tablet::zv2::client::zwp_tablet_tool_v2::ZwpTabletToolV2,
+    >,
+
     /// Loop handle to re-register event sources, such as keyboard repeat.
     pub loop_handle: LoopHandle<'static, Self>,
 
@@ -161,6 +170,7 @@ impl WinitState {
         let monitors = output_state.outputs().map(MonitorHandle::new).collect();
 
         let seat_state = SeatState::new(globals, queue_handle);
+        let tablet_manager = super::seat::tablet::TabletManager::new(globals, queue_handle).ok();
 
         let data_device_manager_state = match DataDeviceManagerState::bind(globals, queue_handle) {
             Ok(manager) => Some(manager),
@@ -217,7 +227,10 @@ impl WinitState {
                 data_device.as_ref().map(|device| device.inner().clone()),
                 queue_handle,
             );
-            seats.insert(seat.id(), WinitSeatState::new(data_device));
+            let mut seat_state = WinitSeatState::new(data_device);
+            seat_state.tablet_seat =
+                tablet_manager.as_ref().map(|manager| manager.seat(&seat, queue_handle));
+            seats.insert(seat.id(), seat_state);
         }
 
         let (viewporter_state, fractional_scaling_manager) =
@@ -262,6 +275,8 @@ impl WinitState {
             pointer_surfaces: Default::default(),
 
             monitors: Arc::new(Mutex::new(monitors)),
+            tablet_manager,
+            tablet_tools: Default::default(),
             events_sink: EventSink::new(),
             pending_primary_offer: None,
             loop_handle,
