@@ -160,6 +160,15 @@ fn pressure_from_raw(pressure: u32) -> f64 {
     f64::from(pressure.min(u32::from(u16::MAX))) / f64::from(u16::MAX)
 }
 
+/// A tool without the pressure capability presses at full force, like a mouse.
+fn contact_pressure(has_pressure: bool, pressure: f64) -> f64 {
+    if has_pressure {
+        pressure.clamp(0.0, 1.0)
+    } else {
+        1.0
+    }
+}
+
 fn tablet_window_id(tool: &ToolState) -> Option<crate::window::WindowId> {
     let surface = tool.surface.as_ref()?;
     let parent =
@@ -333,9 +342,7 @@ impl WinitState {
                         self.clipboard.pointer_input(&seat.id(), serial, window_id, true);
                     }
                     if !tool.down {
-                        if !tool.has_pressure {
-                            tool.pressure = 1.0;
-                        }
+                        tool.pressure = contact_pressure(tool.has_pressure, tool.pressure);
                         tool.down = true;
                         self.tablet_emit(tool, tool_id, TabletPhase::Pressed);
                     }
@@ -737,6 +744,14 @@ mod tests {
         assert_eq!(pressure_from_raw(u32::MAX), 1.0);
         let half = pressure_from_raw(32768);
         assert!((half - 0.5).abs() < 0.001, "{half}");
+    }
+
+    #[test]
+    fn a_tool_without_a_pressure_axis_presses_at_full_force() {
+        assert_eq!(contact_pressure(false, 0.0), 1.0);
+        assert_eq!(contact_pressure(false, 0.3), 1.0);
+        assert_eq!(contact_pressure(true, 0.3), 0.3);
+        assert_eq!(contact_pressure(true, 2.0), 1.0);
     }
 
     #[test]
